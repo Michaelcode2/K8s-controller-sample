@@ -9,6 +9,7 @@ Kubernetes Controller CLI that can:
 - Display recent events in a namespace
 - Watch for real-time deployment changes
 - Connect to any Kubernetes cluster via kubeconfig
+- FastHTTP server with a configurable port (default: 8080).
 
 ## Key features:
 
@@ -23,3 +24,4 @@ Kubernetes Controller CLI that can:
 - Add Kubernetes dependencies (client-go, apimachinery, api)
 - Create controller command with proper Cobra integration
 - Add zerolog logging.
+- Add a FastHTTP server with a configurable port (default: 8080)

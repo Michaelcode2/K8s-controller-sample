@@ -23,6 +23,7 @@ Features:
   • Structured logging with environment support
   • Namespace-specific monitoring
   • Production-ready with JSON logging
+  • HTTP API server with FastHTTP
 
 Examples:
   # Monitor deployments in default namespace
@@ -31,8 +32,17 @@ Examples:
   # Watch for changes in kube-system namespace
   k8s-controller-tutorial controller -n kube-system -w
 
+  # Start HTTP server on port 8080
+  k8s-controller-tutorial server -p 8080
+
+  # Start HTTP server on specific host and port
+  k8s-controller-tutorial server -H 127.0.0.1 -p 9090
+
   # Get help for controller command
-  k8s-controller-tutorial controller --help`,
+  k8s-controller-tutorial controller --help
+
+  # Get help for server command
+  k8s-controller-tutorial server --help`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

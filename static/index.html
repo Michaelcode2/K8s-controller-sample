@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s Controller Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .status-card h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .metric-label {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .healthy {
+            color: #28a745;
+        }
+
+        .unhealthy {
+            color: #dc3545;
+        }
+
+        .deployment-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 15px;
+        }
+
+        .deployment-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .deployment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .deployment-name {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+
+        .deployment-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .replicas-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .event-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            padding: 12px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            background: white;
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .event-type {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .event-normal {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .event-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .event-timestamp {
+            color: #6c757d;
+            font-size: 12px;
+        }
+
+        .event-message {
+            color: #495057;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>K8s Controller Dashboard</h1>
+            <p>Real-time Kubernetes deployment monitoring and management</p>
+        </div>
+
+        <div class="controls">
+            <div class="form-group">
+                <label for="namespace">Namespace:</label>
+                <input type="text" id="namespace" value="default" placeholder="Enter namespace">
+                
+                <label for="limit">Event Limit:</label>
+                <input type="number" id="limit" value="10" min="1" max="100">
+                
+                <button class="btn" onclick="loadData()">Refresh Data</button>
+                <button class="btn" onclick="loadStatus()">Load Status</button>
+                <button class="btn" onclick="loadEvents()">Load Events</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="messages"></div>
+            
+            <div class="section">
+                <h2>Cluster Status</h2>
+                <div id="status-content" class="loading">Loading status...</div>
+            </div>
+
+            <div class="section">
+                <h2>Deployments</h2>
+                <div id="deployments-content" class="loading">Loading deployments...</div>
+            </div>
+
+            <div class="section">
+                <h2>Recent Events</h2>
+                <div id="events-content" class="loading">Loading events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        function showMessage(message, type = 'success') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        function showError(message) {
+            showMessage(message, 'error');
+        }
+
+        async function apiCall(endpoint, params = {}) {
+            try {
+                const url = new URL(API_BASE + endpoint);
+                Object.keys(params).forEach(key => {
+                    if (params[key] !== null && params[key] !== undefined) {
+                        url.searchParams.append(key, params[key]);
+                    }
+                });
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        async function loadStatus() {
+            const namespace = document.getElementById('namespace').value;
+            const statusContent = document.getElementById('status-content');
+            
+            try {
+                statusContent.innerHTML = '<div class="loading">Loading status...</div>';
+                
+                const data = await apiCall('/api/v1/status', { namespace });
+                
+                if (data.success) {
+                    const status = data.data;
+                    statusContent.innerHTML = `
+                        <div class="status-grid">
+                            <div class="status-card">
+                                <h3>Namespace</h3>
+                                <div class="metric">
+                                    <span class="metric-label">Name:</span>
+                                    <span class="metric-value">${status.namespace.name}</span>
+                                </div>
+                            </div>
+                            <div class="status-card">
+                                <h3>Deployments</h3>
+                                <div class="metric">
+                                    <span class="metric-label">Total:</span>
+                                    <span class="metric-value">${status.deployments.total}</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Healthy:</span>
+                                    <span class="metric-value healthy">${status.deployments.healthy}</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Unhealthy:</span>
+                                    <span class="metric-value unhealthy">${status.deployments.unhealthy}</span>
+                                </div>
+                            </div>
+                            <div class="status-card">
+                                <h3>Pods</h3>
+                                <div class="metric">
+                                    <span class="metric-label">Total:</span>
+                                    <span class="metric-value">${status.pods.total}</span>
+                                </div>
+                                ${Object.entries(status.pods.status).map(([phase, count]) => `
+                                    <div class="metric">
+                                        <span class="metric-label">${phase}:</span>
+                                        <span class="metric-value">${count}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="status-card">
+                                <h3>Services</h3>
+                                <div class="metric">
+                                    <span class="metric-label">Total:</span>
+                                    <span class="metric-value">${status.services.total}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    statusContent.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                statusContent.innerHTML = `<div class="error">Failed to load status: ${error.message}</div>`;
+            }
+        }
+
+        async function loadDeployments() {
+            const namespace = document.getElementById('namespace').value;
+            const deploymentsContent = document.getElementById('deployments-content');
+            
+            try {
+                deploymentsContent.innerHTML = '<div class="loading">Loading deployments...</div>';
+                
+                const data = await apiCall('/api/v1/deployments', { namespace });
+                
+                if (data.success) {
+                    const deployments = data.data.deployments;
+                    
+                    if (deployments.length === 0) {
+                        deploymentsContent.innerHTML = '<div class="loading">No deployments found in this namespace.</div>';
+                        return;
+                    }
+                    
+                    deploymentsContent.innerHTML = `
+                        <div class="deployment-list">
+                            ${deployments.map(deployment => `
+                                <div class="deployment-card">
+                                    <div class="deployment-header">
+                                        <span class="deployment-name">${deployment.name}</span>
+                                        <span class="deployment-status ${deployment.healthy ? 'status-healthy' : 'status-unhealthy'}">
+                                            ${deployment.healthy ? 'Healthy' : 'Unhealthy'}
+                                        </span>
+                                    </div>
+                                    <div class="replicas-info">
+                                        <div class="metric">
+                                            <span class="metric-label">Ready:</span>
+                                            <span class="metric-value">${deployment.ready_replicas}/${deployment.desired_replicas}</span>
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label">Available:</span>
+                                            <span class="metric-value">${deployment.available_replicas}</span>
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label">Updated:</span>
+                                            <span class="metric-value">${deployment.updated_replicas}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    deploymentsContent.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                deploymentsContent.innerHTML = `<div class="error">Failed to load deployments: ${error.message}</div>`;
+            }
+        }
+
+        async function loadEvents() {
+            const namespace = document.getElementById('namespace').value;
+            const limit = document.getElementById('limit').value;
+            const eventsContent = document.getElementById('events-content');
+            
+            try {
+                eventsContent.innerHTML = '<div class="loading">Loading events...</div>';
+                
+                const data = await apiCall('/api/v1/events', { namespace, limit });
+                
+                if (data.success) {
+                    const events = data.data.events;
+                    
+                    if (events.length === 0) {
+                        eventsContent.innerHTML = '<div class="loading">No events found in this namespace.</div>';
+                        return;
+                    }
+                    
+                    eventsContent.innerHTML = `
+                        <div class="event-list">
+                            ${events.map(event => `
+                                <div class="event-item">
+                                    <div class="event-header">
+                                        <span class="event-type ${event.type.toLowerCase() === 'warning' ? 'event-warning' : 'event-normal'}">
+                                            ${event.type}
+                                        </span>
+                                        <span class="event-timestamp">${new Date(event.timestamp).toLocaleString()}</span>
+                                    </div>
+                                    <div class="event-message">
+                                        <strong>${event.reason}</strong>: ${event.message}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    eventsContent.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                eventsContent.innerHTML = `<div class="error">Failed to load events: ${error.message}</div>`;
+            }
+        }
+
+        async function loadData() {
+            await Promise.all([
+                loadStatus(),
+                loadDeployments(),
+                loadEvents()
+            ]);
+            showMessage('Data refreshed successfully');
+        }
+
+        // Load initial data when page loads
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html> 
