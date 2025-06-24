@@ -40,53 +40,86 @@ A starter template for building Kubernetes controllers or CLI tools in Go using 
 
 ## Project Structure
 
-- `cmd/` — Contains your CLI commands.
-- `main.go` — Entry point for your application.
-- `cmd/go_basic.go`: Implements the command and struct logic
-- `cmd/go_basic_test.go`: Unit tests for the struct methods 
+- `cmd/` — Contains your CLI commands
+  - `controller.go` — Main Kubernetes controller implementation
+  - `root.go` — Root command configuration
+- `main.go` — Entry point for your application
+- `pkg/logger/` — Structured logging with zerolog
+- `examples/` — Example code and demos
+- `docs/` — Documentation
+- `scripts/` — Helper scripts for different environments
 
-This directory contains the `go_basic.go` file, which demonstrates basic usage of Go structs and methods within a Cobra CLI command.
+## Using the Kubernetes Controller
 
-## go_basic.go Overview
-- Defines a `Kubernetes` struct with fields for name, version, users, and node number.
-- Implements methods to print users and add a new user.
-- Registers a `go-basic` Cobra command that
-  - Initializes a sample `Kubernetes` struct
-  - Prints the list of users
-  - Adds a new user
-  - Prints the updated list of users
-
-## Usage
-
-To run the `go-basic` command:
-
-```sh
-# From the project root
-go run main.go go-basic
-```
-
-You should see output listing the initial users, then the updated list after adding a new user.
-
-## Testing
-
-Unit tests for the `Kubernetes` struct are provided in `go_basic_test.go`.
-To run the tests:
-
-```sh
-go test ./cmd
-```
-
-## Using custom controller
-
-### Show current status
+### Show current deployment status
+```bash
 ./controller controller
+```
 
-### Watch for changes
+### Watch for deployment changes
+```bash
 ./controller controller -w
+```
 
 ### Monitor specific namespace
-./controller controller -n kube-system 
+```bash
+./controller controller -n kube-system
+```
 
+### Get help
+```bash
+./controller controller --help
+```
+
+## Logging
+
+This project includes structured logging using [zerolog](https://github.com/rs/zerolog) with environment-specific configurations.
+
+### Environment Modes
+
+**Development Mode (default):**
+```bash
+# Pretty console output with emojis and debug level
+./scripts/run_dev.sh controller -n default
+```
+
+**Production Mode:**
+```bash
+# JSON format for log aggregation systems
+./scripts/run_prod.sh controller -n default
+```
+
+### Manual Environment Control
+
+```bash
+# Development mode
+ENV=dev ./controller controller
+
+# Production mode  
+ENV=prod ./controller controller
+```
+
+### Features
+
+- **Structured logging** with context (namespace, deployment)
+- **Environment-aware** output formats
+- **Multiple log levels** (Debug, Info, Warn, Error, Fatal)
+- **Context-aware logging** with namespace and deployment fields
+- **Production-ready** JSON output for log aggregation
+
+For detailed logging documentation, see [docs/LOGGING.md](docs/LOGGING.md).
+
+### Demo
+
+Test the logging system:
+
+```bash
+# Development mode
+go run examples/logging_demo.go
+
+# Production mode
+ENV=prod go run examples/logging_demo.go
+```
 
 ## License
 

@@ -22,3 +22,4 @@ Kubernetes Controller CLI that can:
 
 - Add Kubernetes dependencies (client-go, apimachinery, api)
 - Create controller command with proper Cobra integration
+- Add zerolog logging.

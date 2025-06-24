@@ -1,5 +1,5 @@
 /*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+Copyright © 2025 Michael Vaynagiy (Michaelcode2)
 */
 package cmd
 
@@ -12,16 +12,27 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "k8s-controller-tutorial",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "A Kubernetes controller for monitoring deployments and events",
+	Long: `A comprehensive Kubernetes controller built with Go and Cobra that provides
+real-time monitoring and management of Kubernetes deployments.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+Features:
+  • Monitor deployment status and health
+  • Watch for real-time deployment changes
+  • Track Kubernetes events and notifications
+  • Structured logging with environment support
+  • Namespace-specific monitoring
+  • Production-ready with JSON logging
+
+Examples:
+  # Monitor deployments in default namespace
+  k8s-controller-tutorial controller
+
+  # Watch for changes in kube-system namespace
+  k8s-controller-tutorial controller -n kube-system -w
+
+  # Get help for controller command
+  k8s-controller-tutorial controller --help`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

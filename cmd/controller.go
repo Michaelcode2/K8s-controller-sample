@@ -11,11 +11,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/yourusername/k8s-controller-tutorial/pkg/logger"
 )
 
 var (
 	namespace string
 	watch     bool
+	log       *logger.Logger
 )
 
 // controllerCmd represents the controller command
@@ -31,21 +34,30 @@ func init() {
 	rootCmd.AddCommand(controllerCmd)
 	controllerCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace to monitor")
 	controllerCmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for changes continuously")
+
+	// Initialize logger
+	log = logger.New()
 }
 
 func runController(cmd *cobra.Command, args []string) {
-	fmt.Printf("Starting Kubernetes Controller for namespace: %s\n", namespace)
+	namespaceLogger := log.WithNamespace(namespace)
+
+	namespaceLogger.Info("Starting Kubernetes Controller", map[string]interface{}{
+		"namespace":  namespace,
+		"watch_mode": watch,
+	})
 
 	clientset, err := getKubernetesClient()
 	if err != nil {
-		fmt.Printf("Error getting Kubernetes client: %v\n", err)
-		os.Exit(1)
+		log.Fatal("Failed to get Kubernetes client", err, map[string]interface{}{
+			"namespace": namespace,
+		})
 	}
 
 	if watch {
-		watchDeployments(clientset)
+		watchDeployments(clientset, namespaceLogger)
 	} else {
-		showDeploymentStatus(clientset)
+		showDeploymentStatus(clientset, namespaceLogger)
 	}
 }
 
@@ -54,6 +66,10 @@ func getKubernetesClient() (*kubernetes.Clientset, error) {
 	if kubeconfig == "" {
 		kubeconfig = os.Getenv("HOME") + "/.kube/config"
 	}
+
+	log.Debug("Loading kubeconfig", map[string]interface{}{
+		"kubeconfig_path": kubeconfig,
+	})
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
@@ -65,64 +81,132 @@ func getKubernetesClient() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to create clientset: %v", err)
 	}
 
+	log.Debug("Kubernetes client created successfully", nil)
 	return clientset, nil
 }
 
-func showDeploymentStatus(clientset *kubernetes.Clientset) {
-	fmt.Println("DEPLOYMENT STATUS")
-	fmt.Println("=================")
+func showDeploymentStatus(clientset *kubernetes.Clientset, namespaceLogger *logger.Logger) {
+	namespaceLogger.Info("Fetching deployment status", nil)
 
 	deployments, err := clientset.AppsV1().Deployments(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		fmt.Printf("Error getting deployments: %v\n", err)
+		namespaceLogger.Error("Failed to get deployments", err, nil)
 		return
 	}
 
+	namespaceLogger.Info("Deployment status retrieved", map[string]interface{}{
+		"deployment_count": len(deployments.Items),
+	})
+
+	fmt.Println("DEPLOYMENT STATUS")
+	fmt.Println("=================")
+
 	for _, deployment := range deployments.Items {
+		deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
+
+		readyReplicas := deployment.Status.ReadyReplicas
+		desiredReplicas := *deployment.Spec.Replicas
+		availableReplicas := deployment.Status.AvailableReplicas
+
+		deploymentLogger.Info("Deployment status", map[string]interface{}{
+			"ready_replicas":     readyReplicas,
+			"desired_replicas":   desiredReplicas,
+			"available_replicas": availableReplicas,
+			"updated_replicas":   deployment.Status.UpdatedReplicas,
+		})
+
 		fmt.Printf("\nDeployment: %s\n", deployment.Name)
 		fmt.Printf("  Replicas: %d/%d (Available: %d, Ready: %d)\n",
-			deployment.Status.ReadyReplicas,
-			*deployment.Spec.Replicas,
-			deployment.Status.AvailableReplicas,
-			deployment.Status.ReadyReplicas)
+			readyReplicas,
+			desiredReplicas,
+			availableReplicas,
+			readyReplicas)
+
+		// Log warnings for unhealthy deployments
+		if readyReplicas < desiredReplicas {
+			deploymentLogger.Warn("Deployment has fewer ready replicas than desired", map[string]interface{}{
+				"ready_replicas":   readyReplicas,
+				"desired_replicas": desiredReplicas,
+			})
+		}
 	}
 
-	showRecentEvents(clientset)
+	showRecentEvents(clientset, namespaceLogger)
 }
 
-func showRecentEvents(clientset *kubernetes.Clientset) {
-	fmt.Println("\nRECENT EVENTS")
-	fmt.Println("=============")
+func showRecentEvents(clientset *kubernetes.Clientset, namespaceLogger *logger.Logger) {
+	namespaceLogger.Info("Fetching recent events", nil)
 
 	events, err := clientset.CoreV1().Events(namespace).List(context.TODO(), metav1.ListOptions{
 		Limit: 10,
 	})
 	if err != nil {
-		fmt.Printf("Error getting events: %v\n", err)
+		namespaceLogger.Error("Failed to get events", err, nil)
 		return
 	}
+
+	namespaceLogger.Info("Events retrieved", map[string]interface{}{
+		"event_count": len(events.Items),
+	})
+
+	fmt.Println("\nRECENT EVENTS")
+	fmt.Println("=============")
 
 	for _, event := range events.Items {
 		timestamp := event.LastTimestamp.Format("15:04:05")
 		fmt.Printf("[%s] %s: %s\n", timestamp, event.Reason, event.Message)
+
+		// Log events based on their type
+		eventLogger := namespaceLogger.WithDeployment(event.InvolvedObject.Name)
+		fields := map[string]interface{}{
+			"event_type":    event.Type,
+			"event_reason":  event.Reason,
+			"event_message": event.Message,
+			"timestamp":     event.LastTimestamp,
+		}
+
+		switch event.Type {
+		case "Warning":
+			eventLogger.Warn("Kubernetes event", fields)
+		case "Normal":
+			eventLogger.Debug("Kubernetes event", fields)
+		default:
+			eventLogger.Info("Kubernetes event", fields)
+		}
 	}
 }
 
-func watchDeployments(clientset *kubernetes.Clientset) {
+func watchDeployments(clientset *kubernetes.Clientset, namespaceLogger *logger.Logger) {
+	namespaceLogger.Info("Starting deployment watcher", map[string]interface{}{
+		"watch_mode": true,
+	})
+
 	fmt.Println("Watching deployments for changes... (Press Ctrl+C to stop)")
 
 	watcher, err := clientset.AppsV1().Deployments(namespace).Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		fmt.Printf("Error watching deployments: %v\n", err)
+		namespaceLogger.Error("Failed to create deployment watcher", err, nil)
 		return
 	}
 	defer watcher.Stop()
+
+	namespaceLogger.Info("Deployment watcher started successfully", nil)
 
 	for {
 		select {
 		case event := <-watcher.ResultChan():
 			deployment := event.Object.(*appsv1.Deployment)
 			timestamp := time.Now().Format("15:04:05")
+
+			deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
+
+			deploymentLogger.Info("Deployment event detected", map[string]interface{}{
+				"event_type":       event.Type,
+				"deployment_name":  deployment.Name,
+				"ready_replicas":   deployment.Status.ReadyReplicas,
+				"desired_replicas": *deployment.Spec.Replicas,
+			})
+
 			fmt.Printf("[%s] %s: %s\n", timestamp, event.Type, deployment.Name)
 		}
 	}
