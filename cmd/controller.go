@@ -192,22 +192,19 @@ func watchDeployments(clientset *kubernetes.Clientset, namespaceLogger *logger.L
 
 	namespaceLogger.Info("Deployment watcher started successfully", nil)
 
-	for {
-		select {
-		case event := <-watcher.ResultChan():
-			deployment := event.Object.(*appsv1.Deployment)
-			timestamp := time.Now().Format("15:04:05")
+	for event := range watcher.ResultChan() {
+		deployment := event.Object.(*appsv1.Deployment)
+		timestamp := time.Now().Format("15:04:05")
 
-			deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
+		deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
 
-			deploymentLogger.Info("Deployment event detected", map[string]interface{}{
-				"event_type":       event.Type,
-				"deployment_name":  deployment.Name,
-				"ready_replicas":   deployment.Status.ReadyReplicas,
-				"desired_replicas": *deployment.Spec.Replicas,
-			})
+		deploymentLogger.Info("Deployment event detected", map[string]interface{}{
+			"event_type":       event.Type,
+			"deployment_name":  deployment.Name,
+			"ready_replicas":   deployment.Status.ReadyReplicas,
+			"desired_replicas": *deployment.Spec.Replicas,
+		})
 
-			fmt.Printf("[%s] %s: %s\n", timestamp, event.Type, deployment.Name)
-		}
+		fmt.Printf("[%s] %s: %s\n", timestamp, event.Type, deployment.Name)
 	}
 }
