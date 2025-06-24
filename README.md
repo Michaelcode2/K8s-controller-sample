@@ -76,13 +76,15 @@ To run the tests:
 go test ./cmd
 ```
 
-# Show current status
+## Using custom controller
+
+### Show current status
 ./controller controller
 
-# Watch for changes
+### Watch for changes
 ./controller controller -w
 
-# Monitor specific namespace
+### Monitor specific namespace
 ./controller controller -n kube-system 
 
 
