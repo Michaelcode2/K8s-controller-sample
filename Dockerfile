@@ -10,6 +10,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -v -o k8s-controlle
 # Final stage
 FROM gcr.io/distroless/static-debian12
 WORKDIR /
-COPY --from=builder /app/k8s-controller-sample .
+COPY --from=builder /app/k8s-controller-tutorial .
 EXPOSE 8080
-ENTRYPOINT ["/k8s-controller-sample"]
+ENTRYPOINT ["/k8s-controller-tutorial"]
