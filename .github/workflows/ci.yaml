@@ -21,6 +21,7 @@ on:
       - 'cmd/**'
       - 'pkg/**'
       - '.github/workflows/ci.yml'
+  workflow_dispatch:
 
 jobs:
   build:
