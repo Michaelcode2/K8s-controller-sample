@@ -1,0 +1,27 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## What We Built:
+Kubernetes Controller CLI that can:
+- Show deployment status (replicas, availability, readiness)
+- Display recent events in a namespace
+- Watch for real-time deployment changes
+- Connect to any Kubernetes cluster via kubeconfig
+- FastHTTP server with a configurable port (default: 8080).
+
+## Key features:
+
+- Real-time monitoring with watch functionality
+- Namespace filtering with -n flag
+- Event logging showing recent cluster events
+- Deployment status with replica counts and availability
+- Error handling with proper user feedback
+
+## Key Implementation Steps:
+
+- Add Kubernetes dependencies (client-go, apimachinery, api)
+- Create controller command with proper Cobra integration
+- Add zerolog logging.
+- Add a FastHTTP server with a configurable port (default: 8080)
