@@ -9,7 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/yourusername/k8s-controller-tutorial/pkg/logger"
@@ -17,28 +20,30 @@ import (
 
 var (
 	namespace  string
-	watch      bool
 	kubeconfig string
+	inCluster  bool
 	log        *logger.Logger
 )
 
 // controllerCmd represents the controller command
 var controllerCmd = &cobra.Command{
 	Use:   "controller",
-	Short: "Monitor Kubernetes deployments and events",
+	Short: "Monitor Kubernetes deployments and events with informers",
 	Long: `A Kubernetes controller that monitors deployments and shows their current state
-along with recent events.
+along with recent events using efficient informers.
 
-You can specify a custom kubeconfig file using the --kubeconfig flag, otherwise
-it will use the KUBECONFIG environment variable or default to ~/.kube/config.`,
+Supports both in-cluster and kubeconfig authentication:
+  • Use --in-cluster for running inside a Kubernetes cluster
+  • Use --kubeconfig for external cluster access
+  • Real-time monitoring with local caching and event deduplication`,
 	Run: runController,
 }
 
 func init() {
 	rootCmd.AddCommand(controllerCmd)
 	controllerCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace to monitor")
-	controllerCmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for changes continuously")
 	controllerCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "Path to kubeconfig")
+	controllerCmd.Flags().BoolVarP(&inCluster, "in-cluster", "i", false, "Use in-cluster config")
 
 	// Initialize logger
 	log = logger.New()
@@ -49,7 +54,9 @@ func runController(cmd *cobra.Command, args []string) {
 
 	namespaceLogger.Info("Starting Kubernetes Controller", map[string]interface{}{
 		"namespace":  namespace,
-		"watch_mode": watch,
+		"in_cluster": inCluster,
+		"kubeconfig": kubeconfig,
+		"mode":       "informer",
 	})
 
 	clientset, err := getKubernetesClient()
@@ -59,29 +66,40 @@ func runController(cmd *cobra.Command, args []string) {
 		})
 	}
 
-	if watch {
-		watchDeployments(clientset, namespaceLogger)
-	} else {
-		showDeploymentStatus(clientset, namespaceLogger)
-	}
+	// Show initial deployment status
+	showDeploymentStatus(clientset, namespaceLogger)
+
+	// Always use informer for real-time monitoring
+	watchDeploymentsWithInformer(clientset, namespaceLogger)
 }
 
 func getKubernetesClient() (*kubernetes.Clientset, error) {
-	kubeconfigPath := kubeconfig
-	if kubeconfigPath == "" {
-		kubeconfigPath = os.Getenv("KUBECONFIG")
-	}
-	if kubeconfigPath == "" {
-		kubeconfigPath = os.Getenv("HOME") + "/.kube/config"
-	}
+	var config *rest.Config
+	var err error
 
-	log.Debug("Loading kubeconfig", map[string]interface{}{
-		"kubeconfig_path": kubeconfigPath,
-	})
+	if inCluster {
+		log.Debug("Using in-cluster config", nil)
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load in-cluster config: %v", err)
+		}
+	} else {
+		kubeconfigPath := kubeconfig
+		if kubeconfigPath == "" {
+			kubeconfigPath = os.Getenv("KUBECONFIG")
+		}
+		if kubeconfigPath == "" {
+			kubeconfigPath = os.Getenv("HOME") + "/.kube/config"
+		}
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kubeconfig: %v", err)
+		log.Debug("Loading kubeconfig", map[string]interface{}{
+			"kubeconfig_path": kubeconfigPath,
+		})
+
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load kubeconfig: %v", err)
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -89,7 +107,9 @@ func getKubernetesClient() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to create clientset: %v", err)
 	}
 
-	log.Debug("Kubernetes client created successfully", nil)
+	log.Debug("Kubernetes client created successfully", map[string]interface{}{
+		"auth_method": map[bool]string{true: "in_cluster", false: "kubeconfig"}[inCluster],
+	})
 	return clientset, nil
 }
 
@@ -184,35 +204,100 @@ func showRecentEvents(clientset *kubernetes.Clientset, namespaceLogger *logger.L
 	}
 }
 
-func watchDeployments(clientset *kubernetes.Clientset, namespaceLogger *logger.Logger) {
-	namespaceLogger.Info("Starting deployment watcher", map[string]interface{}{
-		"watch_mode": true,
+func watchDeploymentsWithInformer(clientset *kubernetes.Clientset, namespaceLogger *logger.Logger) {
+	namespaceLogger.Info("Starting deployment informer", map[string]interface{}{
+		"namespace": namespace,
 	})
 
-	fmt.Println("Watching deployments for changes... (Press Ctrl+C to stop)")
+	fmt.Println("Starting deployment informer... (Press Ctrl+C to stop)")
 
-	watcher, err := clientset.AppsV1().Deployments(namespace).Watch(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		namespaceLogger.Error("Failed to create deployment watcher", err, nil)
-		return
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create shared informer factory
+	factory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		30*time.Second, // resync period
+		informers.WithNamespace(namespace),
+	)
+
+	// Get deployment informer
+	deploymentInformer := factory.Apps().V1().Deployments().Informer()
+
+	// Add event handlers
+	deploymentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			deployment := obj.(*appsv1.Deployment)
+			timestamp := time.Now().Format("15:04:05")
+
+			deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
+			deploymentLogger.Info("Deployment added", map[string]interface{}{
+				"event_type":       "ADDED",
+				"ready_replicas":   deployment.Status.ReadyReplicas,
+				"desired_replicas": *deployment.Spec.Replicas,
+			})
+
+			fmt.Printf("[%s] ADDED: %s (%d/%d replicas)\n",
+				timestamp,
+				deployment.Name,
+				deployment.Status.ReadyReplicas,
+				*deployment.Spec.Replicas,
+			)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			oldDeployment := oldObj.(*appsv1.Deployment)
+			newDeployment := newObj.(*appsv1.Deployment)
+			timestamp := time.Now().Format("15:04:05")
+
+			deploymentLogger := namespaceLogger.WithDeployment(newDeployment.Name)
+			deploymentLogger.Info("Deployment updated", map[string]interface{}{
+				"event_type":           "MODIFIED",
+				"old_ready_replicas":   oldDeployment.Status.ReadyReplicas,
+				"new_ready_replicas":   newDeployment.Status.ReadyReplicas,
+				"old_desired_replicas": *oldDeployment.Spec.Replicas,
+				"new_desired_replicas": *newDeployment.Spec.Replicas,
+			})
+
+			fmt.Printf("[%s] MODIFIED: %s (%d/%d -> %d/%d replicas)\n",
+				timestamp,
+				newDeployment.Name,
+				oldDeployment.Status.ReadyReplicas,
+				*oldDeployment.Spec.Replicas,
+				newDeployment.Status.ReadyReplicas,
+				*newDeployment.Spec.Replicas,
+			)
+		},
+		DeleteFunc: func(obj interface{}) {
+			deployment := obj.(*appsv1.Deployment)
+			timestamp := time.Now().Format("15:04:05")
+
+			deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
+			deploymentLogger.Info("Deployment deleted", map[string]interface{}{
+				"event_type": "DELETED",
+			})
+
+			fmt.Printf("[%s] DELETED: %s\n", timestamp, deployment.Name)
+		},
+	})
+
+	// Start the informer
+	namespaceLogger.Info("Starting informer factory", nil)
+	factory.Start(ctx.Done())
+
+	// Wait for cache sync
+	namespaceLogger.Info("Waiting for cache sync", nil)
+	for t, ok := range factory.WaitForCacheSync(ctx.Done()) {
+		if !ok {
+			namespaceLogger.Error("Failed to sync informer", fmt.Errorf("sync failed for %v", t), nil)
+			os.Exit(1)
+		}
 	}
-	defer watcher.Stop()
 
-	namespaceLogger.Info("Deployment watcher started successfully", nil)
+	namespaceLogger.Info("Informer cache synced successfully", nil)
+	fmt.Println("Informer cache synced. Watching for deployment events...")
 
-	for event := range watcher.ResultChan() {
-		deployment := event.Object.(*appsv1.Deployment)
-		timestamp := time.Now().Format("15:04:05")
-
-		deploymentLogger := namespaceLogger.WithDeployment(deployment.Name)
-
-		deploymentLogger.Info("Deployment event detected", map[string]interface{}{
-			"event_type":       event.Type,
-			"deployment_name":  deployment.Name,
-			"ready_replicas":   deployment.Status.ReadyReplicas,
-			"desired_replicas": *deployment.Spec.Replicas,
-		})
-
-		fmt.Printf("[%s] %s: %s\n", timestamp, event.Type, deployment.Name)
-	}
+	// Block until context is cancelled
+	<-ctx.Done()
+	namespaceLogger.Info("Informer stopped", nil)
 }
