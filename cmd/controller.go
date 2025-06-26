@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	namespace string
-	watch     bool
-	log       *logger.Logger
+	namespace  string
+	watch      bool
+	kubeconfig string
+	log        *logger.Logger
 )
 
 // controllerCmd represents the controller command
@@ -26,7 +27,10 @@ var controllerCmd = &cobra.Command{
 	Use:   "controller",
 	Short: "Monitor Kubernetes deployments and events",
 	Long: `A Kubernetes controller that monitors deployments and shows their current state
-along with recent events.`,
+along with recent events.
+
+You can specify a custom kubeconfig file using the --kubeconfig flag, otherwise
+it will use the KUBECONFIG environment variable or default to ~/.kube/config.`,
 	Run: runController,
 }
 
@@ -34,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(controllerCmd)
 	controllerCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Namespace to monitor")
 	controllerCmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for changes continuously")
+	controllerCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "Path to kubeconfig")
 
 	// Initialize logger
 	log = logger.New()
@@ -62,16 +67,19 @@ func runController(cmd *cobra.Command, args []string) {
 }
 
 func getKubernetesClient() (*kubernetes.Clientset, error) {
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = os.Getenv("HOME") + "/.kube/config"
+	kubeconfigPath := kubeconfig
+	if kubeconfigPath == "" {
+		kubeconfigPath = os.Getenv("KUBECONFIG")
+	}
+	if kubeconfigPath == "" {
+		kubeconfigPath = os.Getenv("HOME") + "/.kube/config"
 	}
 
 	log.Debug("Loading kubeconfig", map[string]interface{}{
-		"kubeconfig_path": kubeconfig,
+		"kubeconfig_path": kubeconfigPath,
 	})
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load kubeconfig: %v", err)
 	}

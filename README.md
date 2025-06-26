@@ -294,3 +294,60 @@ This implementation demonstrates:
 - **Context Awareness**: Logs include relevant Kubernetes context
 
 The controller is now ready to use with comprehensive logging and can be extended based on your specific needs! 
+
+## New Features
+
+### 1. kubeconfig Parameter
+
+The controller now supports a `--kubeconfig` flag to specify a custom kubeconfig file. The precedence order for kubeconfig resolution is:
+1. CLI flag `--kubeconfig` (highest priority)
+2. `KUBECONFIG` environment variable
+3. Default `~/.kube/config` (lowest priority)
+
+This gives users full flexibility to specify which Kubernetes cluster configuration to use while maintaining backward compatibility with the existing behavior.
+
+### Usage Examples
+
+#### 1. Use a specific kubeconfig file
+```bash
+# Use a specific kubeconfig file
+./your-app controller --kubeconfig /path/to/custom/kubeconfig
+
+# Use short flag
+./your-app controller -k /path/to/custom/kubeconfig
+
+# Use with other flags
+./your-app controller --kubeconfig /path/to/kubeconfig --namespace my-namespace --watch
+```
+
+#### 2. Show Current Status
+```bash
+# Show deployments in default namespace
+./controller controller
+
+# Show deployments in specific namespace
+./controller controller -n kube-system
+```
+
+#### 3. Watch for Changes
+```bash
+# Watch deployments in real-time
+./controller controller -w
+
+# Watch specific namespace
+./controller controller -n my-app -w
+```
+
+#### 4. Help
+```bash
+./controller controller --help
+```
+
+#### 5. Environment-Specific Logging
+```bash
+# Development mode with detailed logging
+./scripts/run_dev.sh controller -n default
+
+# Production mode with JSON logging
+./scripts/run_prod.sh controller -n default
+``` 
