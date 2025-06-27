@@ -25,6 +25,9 @@ FROM gcr.io/distroless/static:nonroot
 # Copy the binary from builder stage
 COPY --from=builder /workspace/manager .
 
+# Copy static files for web dashboard
+COPY --from=builder /workspace/static ./static
+
 # Use non-root user
 USER 65532:65532
 

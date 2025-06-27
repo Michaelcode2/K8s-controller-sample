@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -113,9 +116,6 @@ func createHandler(clientset *kubernetes.Clientset) fasthttp.RequestHandler {
 			return
 		}
 
-		// Set content type
-		ctx.Response.Header.Set("Content-Type", "application/json")
-
 		path := string(ctx.Path())
 		method := string(ctx.Method())
 
@@ -124,6 +124,15 @@ func createHandler(clientset *kubernetes.Clientset) fasthttp.RequestHandler {
 			"path":   path,
 			"remote": ctx.RemoteAddr(),
 		})
+
+		// Handle static files
+		if strings.HasPrefix(path, "/static/") {
+			serveStaticFile(ctx, path)
+			return
+		}
+
+		// Set content type for API endpoints
+		ctx.Response.Header.Set("Content-Type", "application/json")
 
 		switch {
 		case path == "/health" && method == "GET":
@@ -136,10 +145,56 @@ func createHandler(clientset *kubernetes.Clientset) fasthttp.RequestHandler {
 			handleGetEvents(ctx, clientset)
 		case path == "/api/v1/status" && method == "GET":
 			handleGetStatus(ctx, clientset)
+		case path == "/" && method == "GET":
+			// Serve the dashboard directly
+			serveStaticFile(ctx, "/static/index.html")
 		default:
 			handleNotFound(ctx)
 		}
 	}
+}
+
+func serveStaticFile(ctx *fasthttp.RequestCtx, urlPath string) {
+	// Remove /static prefix and get the file path
+	filePath := strings.TrimPrefix(urlPath, "/static")
+	if filePath == "" || filePath == "/" {
+		filePath = "/index.html"
+	}
+
+	// Build full file path
+	fullPath := filepath.Join("./static", filePath)
+
+	// Read the file
+	content, err := ioutil.ReadFile(fullPath)
+	if err != nil {
+		log.Error("Failed to read static file", err, map[string]interface{}{
+			"file_path": fullPath,
+			"url_path":  urlPath,
+		})
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		ctx.SetBodyString("File not found")
+		return
+	}
+
+	// Set appropriate content type
+	if strings.HasSuffix(filePath, ".html") {
+		ctx.Response.Header.Set("Content-Type", "text/html; charset=utf-8")
+	} else if strings.HasSuffix(filePath, ".css") {
+		ctx.Response.Header.Set("Content-Type", "text/css; charset=utf-8")
+	} else if strings.HasSuffix(filePath, ".js") {
+		ctx.Response.Header.Set("Content-Type", "application/javascript; charset=utf-8")
+	} else {
+		ctx.Response.Header.Set("Content-Type", "application/octet-stream")
+	}
+
+	log.Info("Serving static file", map[string]interface{}{
+		"file_path":    fullPath,
+		"url_path":     urlPath,
+		"content_size": len(content),
+	})
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetBody(content)
 }
 
 func handleHealth(ctx *fasthttp.RequestCtx) {
@@ -389,10 +444,30 @@ func handleGetStatus(ctx *fasthttp.RequestCtx, clientset *kubernetes.Clientset) 
 }
 
 func handleNotFound(ctx *fasthttp.RequestCtx) {
+	path := string(ctx.Path())
+
+	// Provide helpful error message
+	var message string
+	if strings.HasPrefix(path, "/static/") {
+		message = "Static file not found. Make sure the static directory exists and contains the requested file."
+	} else {
+		message = "API endpoint not found. Try /health, /api/v1/deployments, /api/v1/events, /api/v1/status, or visit /static/index.html for the web dashboard."
+	}
+
 	response := Response{
 		Success: false,
 		Error:   "Endpoint not found",
-		Message: "The requested endpoint does not exist",
+		Message: message,
+		Data: map[string]interface{}{
+			"available_endpoints": []string{
+				"/health",
+				"/api/v1/deployments",
+				"/api/v1/events",
+				"/api/v1/status",
+				"/static/index.html",
+			},
+			"requested_path": path,
+		},
 	}
 
 	jsonResponse, _ := json.Marshal(response)
