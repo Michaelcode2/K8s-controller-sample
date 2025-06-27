@@ -1,15 +1,32 @@
-# syntax=docker/dockerfile:1.4
+# Build stage
 FROM golang:1.24-alpine AS builder
-WORKDIR /app
+
+# Install git and ca-certificates
+RUN apk add --no-cache git ca-certificates
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
 COPY . .
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
-ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -v -o k8s-controller-tutorial -ldflags "-X=github.com/michaelcode2/k8s-controller-sample/cmd.appVersion=$VERSION" main.go
+
+# Build the manager
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Final stage
-FROM gcr.io/distroless/static-debian12
-WORKDIR /
-COPY --from=builder /app/k8s-controller-tutorial .
-EXPOSE 8080
-ENTRYPOINT ["/k8s-controller-tutorial"]
+FROM gcr.io/distroless/static:nonroot
+
+# Copy the binary from builder stage
+COPY --from=builder /workspace/manager .
+
+# Use non-root user
+USER 65532:65532
+
+# Set entrypoint
+ENTRYPOINT ["/manager"]

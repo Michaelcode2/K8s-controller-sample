@@ -25,3 +25,5 @@ Kubernetes Controller CLI that can:
 - Create controller command with proper Cobra integration
 - Add zerolog logging.
 - Add a FastHTTP server with a configurable port (default: 8080)
+- Add controller runtime
+- Implement leader election

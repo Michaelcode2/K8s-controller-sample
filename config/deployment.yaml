@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-controller-sample
+  namespace: default
+  labels:
+    app: k8s-controller-sample
+    version: v1.0.0
+spec:
+  replicas: 2  # Multiple replicas for leader election testing
+  selector:
+    matchLabels:
+      app: k8s-controller-sample
+  template:
+    metadata:
+      labels:
+        app: k8s-controller-sample
+        version: v1.0.0
+    spec:
+      serviceAccountName: k8s-controller-sample
+      containers:
+      - name: manager
+        image: k8s-controller-sample:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /manager
+        args:
+        - manager
+        - --leader-elect
+        - --leader-election-id=k8s-controller-sample
+        - --metrics-bind-address=:8080
+        - --health-probe-bind-address=:8081
+        - --in-cluster
+        env:
+        - name: ENV
+          value: "prod"
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      terminationGracePeriodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-controller-sample-metrics
+  namespace: default
+  labels:
+    app: k8s-controller-sample
+spec:
+  selector:
+    app: k8s-controller-sample
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP
+  - name: health
+    port: 8081
+    targetPort: health
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-controller-sample-webhook
+  namespace: default
+  labels:
+    app: k8s-controller-sample
+spec:
+  selector:
+    app: k8s-controller-sample
+  ports:
+  - name: webhook
+    port: 443
+    targetPort: webhook
+    protocol: TCP 

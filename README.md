@@ -290,13 +290,35 @@ curl http://localhost:8080/api/v1/status?namespace=production
 ./k8s-controller-sample controller -k ~/.kube/config-prod -n production
 ```
 
-### 5. Help
+### 5. Manager Examples (Controller-Runtime)
+```bash
+# Development - Run locally
+go run main.go manager
+
+# Production - With leader election
+go run main.go manager --leader-elect
+
+# Deploy to cluster
+make deploy
+
+# Test leader election
+make test-leader-election
+
+# View metrics
+make test-metrics
+
+# Check logs
+make logs
+```
+
+### 6. Help
 ```bash
 ./k8s-controller-sample controller --help
 ./k8s-controller-sample server --help
+./k8s-controller-sample manager --help
 ```
 
-### 6. Environment-Specific Logging
+### 7. Environment-Specific Logging
 ```bash
 # Development mode with detailed logging
 ./scripts/run_dev.sh controller -n default
@@ -306,6 +328,9 @@ curl http://localhost:8080/api/v1/status?namespace=production
 
 # HTTP server with development logging
 ./scripts/run_dev.sh server -p 8080
+
+# Manager with production logging
+./scripts/run_prod.sh manager --leader-elect
 ```
 
 ## Informer Benefits
@@ -407,12 +432,13 @@ You can extend this controller by:
 
 To test the controller:
 
-1. **Build**: `go build -o controller`
+1. **Build**: `go build -o controller main.go`
 2. **Run CLI with kubeconfig**: `./k8s-controller-sample controller`
 3. **Run CLI with in-cluster**: `./k8s-controller-sample controller -i`
 4. **Test Logging**: `go run examples/logging_demo.go`
 5. **Run HTTP Server**: `./controller server -p 8080`
-6. **Test API Endpoints**:
+6. **Run Manager**: `./controller manager --leader-elect`
+7. **Test API Endpoints**:
    ```bash
    # Health check
    curl http://localhost:8080/health
@@ -426,7 +452,33 @@ To test the controller:
    # Get cluster status
    curl http://localhost:8080/api/v1/status?namespace=default
    ```
-7. **Access Web Dashboard**: Open `http://localhost:8080/static/index.html` in your browser
+8. **Test Manager Endpoints**:
+   ```bash
+   # Health check (manager)
+   curl http://localhost:8081/healthz
+   
+   # Readiness check (manager)
+   curl http://localhost:8081/readyz
+   
+   # Metrics (manager)
+   curl http://localhost:8080/metrics
+   ```
+9. **Access Web Dashboard**: Open `http://localhost:8080/static/index.html` in your browser
+
+### Testing Leader Election
+
+```bash
+# Deploy with multiple replicas
+make deploy
+make test-leader-election
+
+# Watch logs to see leader election
+kubectl logs -l app=k8s-controller-sample -f
+
+# Check leader election status
+kubectl get leases
+kubectl describe lease k8s-controller-sample
+```
 
 Make sure you have a Kubernetes cluster running and accessible via your chosen authentication method.
 
@@ -616,4 +668,226 @@ Access the dashboard at: `http://localhost:8080/static/index.html`
 - **Structured Logging**: All HTTP requests are logged with context
 - **Error Handling**: Comprehensive error responses with proper HTTP status codes
 - **Authentication Integration**: Uses the same Kubernetes authentication as the CLI
-- **Concurrent Safe**: Handles multiple simultaneous requests efficiently 
+- **Concurrent Safe**: Handles multiple simultaneous requests efficiently
+
+## Controller-Runtime with Leader Election
+
+The controller includes a production-ready implementation using controller-runtime framework with leader election support. This provides enterprise-grade features for high availability deployments.
+
+### Key Features
+
+- **Leader Election**: Ensures only one controller instance is active at a time
+- **High Availability**: Multiple replicas with automatic failover
+- **Metrics & Monitoring**: Prometheus metrics and health endpoints
+- **Graceful Shutdown**: Clean shutdown with proper resource cleanup
+- **RBAC Integration**: Comprehensive role-based access control
+- **Structured Reconciliation**: Event-driven reconciliation loops
+
+### Starting the Manager
+
+```bash
+# Basic manager (single instance)
+./k8s-controller-sample manager
+
+# Manager with leader election (production)
+./k8s-controller-sample manager --leader-elect
+
+# Manager with custom configuration
+./k8s-controller-sample manager \
+  --leader-elect \
+  --leader-election-id=my-controller \
+  --metrics-bind-address=:8080 \
+  --health-probe-bind-address=:8081
+
+# Manager watching specific namespace
+./k8s-controller-sample manager --namespace=production --leader-elect
+
+# In-cluster manager with leader election
+./k8s-controller-sample manager --in-cluster --leader-elect
+```
+
+### Manager Configuration Options
+
+#### Basic Options
+- `--namespace` / `-n`: Namespace to watch (empty for all namespaces)
+- `--kubeconfig` / `-k`: Path to kubeconfig file
+- `--in-cluster` / `-i`: Use in-cluster configuration
+
+#### Leader Election Options
+- `--leader-elect`: Enable leader election (default: false)
+- `--leader-election-id`: Leader election lock name (default: "k8s-controller-sample")
+
+#### Server Options
+- `--metrics-bind-address`: Metrics server address (default: ":8080")
+- `--health-probe-bind-address`: Health probe address (default: ":8081")
+- `--webhook-port`: Webhook server port (default: 9443)
+
+### Leader Election Benefits
+
+#### High Availability
+- **Multiple Replicas**: Run multiple controller instances
+- **Automatic Failover**: Seamless leadership transfer on failure
+- **Split-brain Prevention**: Only one active controller at a time
+- **Health Monitoring**: Built-in health and readiness probes
+
+#### Production Features
+- **Metrics Endpoint**: Prometheus-compatible metrics at `/metrics`
+- **Health Checks**: Health endpoint at `/healthz` and readiness at `/readyz`
+- **Graceful Shutdown**: Clean termination with proper cleanup
+- **Resource Management**: Efficient memory and CPU usage
+
+### Deployment
+
+#### Using kubectl
+
+```bash
+# Install RBAC permissions
+kubectl apply -f config/rbac.yaml
+
+# Deploy the controller
+kubectl apply -f config/deployment.yaml
+
+# Check deployment status
+kubectl get pods -l app=k8s-controller-sample
+kubectl logs -l app=k8s-controller-sample -f
+```
+
+#### Using Makefile
+
+```bash
+# Install RBAC only
+make install
+
+# Deploy everything (RBAC + Deployment)
+make deploy
+
+# Check logs
+make logs
+
+# Check status and leader election
+make status
+
+# Test leader election with multiple replicas
+make test-leader-election
+
+# Clean up
+make undeploy
+```
+
+### Leader Election in Action
+
+When multiple replicas are running, you'll see logs like:
+
+```json
+{"level":"info","service":"k8s-controller","time":"2024-01-15T10:30:00Z","message":"attempting to acquire leader lease k8s-controller-sample..."}
+{"level":"info","service":"k8s-controller","time":"2024-01-15T10:30:01Z","message":"successfully acquired lease k8s-controller-sample"}
+{"level":"info","service":"k8s-controller","time":"2024-01-15T10:30:01Z","message":"Starting manager"}
+```
+
+Non-leader instances will show:
+```json
+{"level":"info","service":"k8s-controller","time":"2024-01-15T10:30:00Z","message":"attempting to acquire leader lease k8s-controller-sample..."}
+{"level":"info","service":"k8s-controller","time":"2024-01-15T10:30:01Z","message":"waiting for leader election..."}
+```
+
+### Monitoring and Observability
+
+#### Metrics Endpoint
+The controller exposes Prometheus metrics at `:8080/metrics`:
+
+```bash
+# Port forward to access metrics
+kubectl port-forward svc/k8s-controller-sample-metrics 8080:8080
+
+# View metrics
+curl http://localhost:8080/metrics
+```
+
+**Available Metrics:**
+- `controller_runtime_reconcile_total`: Total number of reconciliations
+- `controller_runtime_reconcile_errors_total`: Total reconciliation errors
+- `controller_runtime_reconcile_time_seconds`: Time spent reconciling
+- `workqueue_adds_total`: Total number of items added to workqueues
+- `leader_election_master_status`: Leader election status (1 = leader, 0 = follower)
+
+#### Health Checks
+Health and readiness endpoints for Kubernetes probes:
+
+```bash
+# Health check
+curl http://localhost:8081/healthz
+
+# Readiness check  
+curl http://localhost:8081/readyz
+```
+
+### Reconciliation Logic
+
+The controller implements a reconciliation loop that:
+
+1. **Watches Deployments**: Monitors all deployment changes
+2. **Logs Status**: Records deployment health and replica information
+3. **Detects Issues**: Identifies unhealthy deployments
+4. **Requeues**: Schedules periodic status checks (30-second intervals)
+
+#### Reconciler Features
+- **Context-aware Logging**: Each reconciliation includes namespace and deployment context
+- **Error Handling**: Proper error handling with retries
+- **Resource Efficiency**: Optimized for low CPU and memory usage
+- **Event-driven**: Only processes actual changes, not periodic polls
+
+### RBAC Configuration
+
+The controller requires specific RBAC permissions:
+
+#### Cluster-level Permissions
+- **Deployments**: Read, watch, and update deployment status
+- **Pods**: Read and watch for status monitoring
+- **Services**: Read and watch for cluster status
+- **Events**: Read, watch, and create for monitoring
+
+#### Leader Election Permissions
+- **Leases**: Full CRUD operations for leader election
+- **ConfigMaps**: Full CRUD operations for legacy leader election
+- **Events**: Create and patch for leader election events
+
+### Container Configuration
+
+The deployment uses security best practices:
+
+```yaml
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+#### Resource Limits
+- **CPU**: 500m limit, 10m request
+- **Memory**: 128Mi limit, 64Mi request
+- **Optimized**: For efficient resource usage in production
+
+### Development vs Production
+
+#### Development Mode
+```bash
+# Run locally without leader election
+go run main.go manager
+
+# Run with leader election locally
+go run main.go manager --leader-elect
+```
+
+#### Production Mode
+```bash
+# Deploy with multiple replicas and leader election
+make deploy
+
+# Scale for testing
+kubectl scale deployment k8s-controller-sample --replicas=3
+``` 
