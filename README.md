@@ -16,6 +16,14 @@ A CLI tool that can:
 - ✅ **FastHTTP server with REST API endpoints**
 - ✅ **Modern web dashboard for monitoring**
 
+## WEB UI for Controller
+
+
+<div align="center">
+  <img src="docs/images/screen.jpeg" alt="Controller screenshot" width="600"/>
+  <p><em>Build your own Kubernetes controller environment from scratch</em></p>
+</div>
+
 ## Step-by-Step Implementation
 
 ### Step 1: Add Kubernetes Dependencies
