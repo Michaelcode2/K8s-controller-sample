@@ -9,4 +9,4 @@ echo "Log Level: DEBUG"
 echo "Output: Pretty console with emojis"
 echo ""
 
-./controller controller "$@" 
+./controller controller "$@"
