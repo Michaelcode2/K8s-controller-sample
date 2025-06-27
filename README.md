@@ -407,11 +407,11 @@ You can extend this controller by:
 
 To test the controller:
 
-1. **Build**: `go build -o k8s-controller-sample`
+1. **Build**: `go build -o controller`
 2. **Run CLI with kubeconfig**: `./k8s-controller-sample controller`
 3. **Run CLI with in-cluster**: `./k8s-controller-sample controller -i`
 4. **Test Logging**: `go run examples/logging_demo.go`
-5. **Run HTTP Server**: `./k8s-controller-sample server -p 8080`
+5. **Run HTTP Server**: `./controller server -p 8080`
 6. **Test API Endpoints**:
    ```bash
    # Health check
