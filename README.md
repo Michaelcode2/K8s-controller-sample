@@ -13,6 +13,8 @@ A CLI tool that can:
 - ✅ **Context-aware logging (namespace, deployment)**
 - ✅ **Production-ready JSON logging**
 - ✅ **In-cluster authentication support**
+- ✅ **FastHTTP server with REST API endpoints**
+- ✅ **Modern web dashboard for monitoring**
 
 ## Step-by-Step Implementation
 
@@ -114,21 +116,21 @@ The controller supports two authentication methods:
 ### 1. In-Cluster Authentication
 Use when running the controller as a pod inside a Kubernetes cluster:
 ```bash
-./k8s-controller-tutorial controller -i
+./k8s-controller-sample controller -i
 ```
 
 ### 2. Kubeconfig Authentication
 Use for external cluster access:
 ```bash
 # Use default kubeconfig
-./k8s-controller-tutorial controller
+./k8s-controller-sample controller
 
 # Use specific kubeconfig file
-./k8s-controller-tutorial controller -k /path/to/kubeconfig
+./k8s-controller-sample controller -k /path/to/kubeconfig
 
 # Use environment variable
 export KUBECONFIG=/path/to/kubeconfig
-./k8s-controller-tutorial controller
+./k8s-controller-sample controller
 ```
 
 **Kubeconfig precedence order:**
@@ -242,46 +244,68 @@ ENV=prod go run examples/logging_demo.go
 ### 1. Basic Usage (Informer is Default)
 ```bash
 # Monitor deployments in default namespace with informer
-./k8s-controller-tutorial controller
+./k8s-controller-sample controller
 
 # Monitor deployments in specific namespace
-./k8s-controller-tutorial controller -n kube-system
+./k8s-controller-sample controller -n kube-system
 ```
 
 ### 2. Authentication Examples
 ```bash
 # Use in-cluster authentication (when running as a pod)
-./k8s-controller-tutorial controller -i
+./k8s-controller-sample controller -i
 
 # Use specific kubeconfig file
-./k8s-controller-tutorial controller -k /path/to/kubeconfig
+./k8s-controller-sample controller -k /path/to/kubeconfig
 
 # Use environment variable for kubeconfig
 export KUBECONFIG=/path/to/kubeconfig
-./k8s-controller-tutorial controller
+./k8s-controller-sample controller
 ```
 
-### 3. Combined Examples
+### 3. HTTP Server Examples
+```bash
+# Start HTTP server on default port 8080
+./k8s-controller-sample server
+
+# Start HTTP server on custom port
+./k8s-controller-sample server -p 9090
+
+# Start HTTP server on specific host and port
+./k8s-controller-sample server -H 0.0.0.0 -p 8080
+
+# Test API endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/api/v1/deployments?namespace=default
+curl http://localhost:8080/api/v1/events?namespace=kube-system&limit=5
+curl http://localhost:8080/api/v1/status?namespace=production
+```
+
+### 4. Combined Examples
 ```bash
 # Monitor specific namespace with in-cluster auth
-./k8s-controller-tutorial controller -n my-app -i
+./k8s-controller-sample controller -n my-app -i
 
 # Monitor with custom kubeconfig and namespace
-./k8s-controller-tutorial controller -k ~/.kube/config-prod -n production
+./k8s-controller-sample controller -k ~/.kube/config-prod -n production
 ```
 
-### 4. Help
+### 5. Help
 ```bash
-./k8s-controller-tutorial controller --help
+./k8s-controller-sample controller --help
+./k8s-controller-sample server --help
 ```
 
-### 5. Environment-Specific Logging
+### 6. Environment-Specific Logging
 ```bash
 # Development mode with detailed logging
 ./scripts/run_dev.sh controller -n default
 
 # Production mode with JSON logging
 ./scripts/run_prod.sh controller -n default
+
+# HTTP server with development logging
+./scripts/run_dev.sh server -p 8080
 ```
 
 ## Informer Benefits
@@ -363,7 +387,7 @@ kubectl get serviceaccount -n your-namespace
 ```bash
 # Ensure ENV is set correctly
 export ENV=prod
-./k8s-controller-tutorial controller
+./k8s-controller-sample controller
 ```
 
 ## Next Steps
@@ -383,10 +407,26 @@ You can extend this controller by:
 
 To test the controller:
 
-1. **Build**: `go build -o k8s-controller-tutorial`
-2. **Run with kubeconfig**: `./k8s-controller-tutorial controller`
-3. **Run with in-cluster**: `./k8s-controller-tutorial controller -i`
+1. **Build**: `go build -o k8s-controller-sample`
+2. **Run CLI with kubeconfig**: `./k8s-controller-sample controller`
+3. **Run CLI with in-cluster**: `./k8s-controller-sample controller -i`
 4. **Test Logging**: `go run examples/logging_demo.go`
+5. **Run HTTP Server**: `./k8s-controller-sample server -p 8080`
+6. **Test API Endpoints**:
+   ```bash
+   # Health check
+   curl http://localhost:8080/health
+   
+   # Get deployments
+   curl http://localhost:8080/api/v1/deployments?namespace=default
+   
+   # Get events
+   curl http://localhost:8080/api/v1/events?namespace=default&limit=10
+   
+   # Get cluster status
+   curl http://localhost:8080/api/v1/status?namespace=default
+   ```
+7. **Access Web Dashboard**: Open `http://localhost:8080/static/index.html` in your browser
 
 Make sure you have a Kubernetes cluster running and accessible via your chosen authentication method.
 
@@ -403,4 +443,177 @@ This implementation demonstrates:
 - **Authentication Flexibility**: Support for both in-cluster and external access
 - **Performance**: Local caching and event deduplication
 
-The controller is now ready to use with comprehensive logging, efficient informers, and flexible authentication options! 
+The controller is now ready to use with comprehensive logging, efficient informers, and flexible authentication options!
+
+## HTTP Server & REST API
+
+The controller includes a FastHTTP server that exposes Kubernetes controller functionality via REST API endpoints. This allows you to access deployment status, events, and cluster information through HTTP requests.
+
+### Starting the HTTP Server
+
+```bash
+# Start server on default port 8080
+./k8s-controller-sample server
+
+# Start server on custom port
+./k8s-controller-sample server -p 9090
+
+# Start server on specific host and port
+./k8s-controller-sample server -H 127.0.0.1 -p 8080
+```
+
+### Implemented REST API Endpoints
+
+The server provides the following REST API endpoints:
+
+#### Health Check
+- **GET /health** — Health check endpoint
+  - Returns server status and version information
+  - Example: `curl http://localhost:8080/health`
+
+#### Deployments
+- **GET /api/v1/deployments** — List deployments with status information
+  - Query parameters:
+    - `namespace` (optional): Kubernetes namespace (default: "default")
+  - Returns deployment details including replica counts and health status
+  - Example: `curl http://localhost:8080/api/v1/deployments?namespace=kube-system`
+
+#### Events
+- **GET /api/v1/events** — List recent Kubernetes events
+  - Query parameters:
+    - `namespace` (optional): Kubernetes namespace (default: "default")
+    - `limit` (optional): Maximum number of events to return (default: 10)
+  - Returns recent events with timestamps, types, and messages
+  - Example: `curl http://localhost:8080/api/v1/events?namespace=default&limit=20`
+
+#### Cluster Status
+- **GET /api/v1/status** — Get comprehensive cluster status summary
+  - Query parameters:
+    - `namespace` (optional): Kubernetes namespace (default: "default")
+  - Returns aggregated information about deployments, pods, and services
+  - Example: `curl http://localhost:8080/api/v1/status?namespace=production`
+
+#### Future Endpoints
+- **POST /api/v1/deployments** — Placeholder for future watch/SSE functionality
+  - Will implement Server-Sent Events for real-time deployment monitoring
+
+### API Response Format
+
+All API endpoints return JSON responses in a consistent format:
+
+```json
+{
+  "success": true,
+  "data": {
+    // Endpoint-specific data
+  },
+  "message": "Optional message",
+  "error": "Error message (only on failure)"
+}
+```
+
+### Example API Responses
+
+#### Health Check Response
+```json
+{
+  "success": true,
+  "message": "Server is healthy",
+  "data": {
+    "timestamp": "2024-01-15T10:30:00Z",
+    "version": "1.0.0"
+  }
+}
+```
+
+#### Deployments Response
+```json
+{
+  "success": true,
+  "data": {
+    "deployments": [
+      {
+        "name": "nginx-deployment",
+        "namespace": "default",
+        "ready_replicas": 3,
+        "desired_replicas": 3,
+        "available_replicas": 3,
+        "updated_replicas": 3,
+        "healthy": true
+      }
+    ],
+    "namespace": "default",
+    "count": 1
+  }
+}
+```
+
+#### Events Response
+```json
+{
+  "success": true,
+  "data": {
+    "events": [
+      {
+        "type": "Normal",
+        "reason": "ScalingReplicaSet",
+        "message": "Scaled up replica set nginx-deployment-abc123 to 3",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "object": "nginx-deployment"
+      }
+    ],
+    "namespace": "default",
+    "count": 1
+  }
+}
+```
+
+#### Status Response
+```json
+{
+  "success": true,
+  "data": {
+    "namespace": {
+      "name": "default"
+    },
+    "deployments": {
+      "total": 5,
+      "healthy": 4,
+      "unhealthy": 1
+    },
+    "pods": {
+      "total": 12,
+      "status": {
+        "Running": 10,
+        "Pending": 2
+      }
+    },
+    "services": {
+      "total": 3
+    },
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Web Dashboard
+
+The server includes a modern web dashboard at `/static/index.html` that provides:
+
+- **Real-time cluster monitoring** with automatic data refresh
+- **Interactive namespace selection** for filtering data
+- **Deployment status visualization** with health indicators
+- **Event timeline** with filtering and limits
+- **Responsive design** that works on desktop and mobile
+- **Modern UI** with gradients, cards, and intuitive navigation
+
+Access the dashboard at: `http://localhost:8080/static/index.html`
+
+### Server Features
+
+- **FastHTTP Performance**: Built with valyala/fasthttp for high performance
+- **CORS Support**: Cross-origin requests enabled for web dashboard
+- **Structured Logging**: All HTTP requests are logged with context
+- **Error Handling**: Comprehensive error responses with proper HTTP status codes
+- **Authentication Integration**: Uses the same Kubernetes authentication as the CLI
+- **Concurrent Safe**: Handles multiple simultaneous requests efficiently 
